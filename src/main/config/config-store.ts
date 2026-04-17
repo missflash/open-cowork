@@ -49,6 +49,22 @@ export type ProviderProfileKey =
 export type ConfigSetId = string;
 export type CreateSetMode = 'blank' | 'clone';
 
+export interface SpecializedMatchRules {
+  keywords?: string[];
+  excludeKeywords?: string[];
+  systemTags?: string[];
+  confidenceThreshold?: number;
+}
+
+export interface SpecializedProfileConfig {
+  enabled: boolean;
+  role: string;
+  domain: string;
+  priority: number;
+  fallbackToDefault: boolean;
+  matchRules: SpecializedMatchRules;
+}
+
 export interface CreateConfigSetPayload {
   name: string;
   mode?: CreateSetMode;
@@ -61,6 +77,7 @@ export interface ProviderProfile {
   model: string;
   contextWindow?: number;
   maxTokens?: number;
+  specialization?: SpecializedProfileConfig | null;
 }
 
 export interface ApiConfigSet {
@@ -357,6 +374,61 @@ function toNonEmptyString(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
+function sanitizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean);
+}
+
+function normalizeSpecialization(
+  specialization: Partial<SpecializedProfileConfig> | null | undefined
+): SpecializedProfileConfig | null {
+  if (!specialization || typeof specialization !== 'object') {
+    return null;
+  }
+
+  const role = typeof specialization.role === 'string' ? specialization.role.trim() : '';
+  const domain = typeof specialization.domain === 'string' ? specialization.domain.trim() : '';
+  const priority =
+    typeof specialization.priority === 'number' && Number.isFinite(specialization.priority)
+      ? specialization.priority
+      : 100;
+  const fallbackToDefault =
+    typeof specialization.fallbackToDefault === 'boolean'
+      ? specialization.fallbackToDefault
+      : true;
+  const matchRules = specialization.matchRules || {};
+  const normalized: SpecializedProfileConfig = {
+    enabled: typeof specialization.enabled === 'boolean' ? specialization.enabled : true,
+    role,
+    domain,
+    priority,
+    fallbackToDefault,
+    matchRules: {
+      keywords: sanitizeStringArray(matchRules.keywords),
+      excludeKeywords: sanitizeStringArray(matchRules.excludeKeywords),
+      systemTags: sanitizeStringArray(matchRules.systemTags),
+      confidenceThreshold:
+        typeof matchRules.confidenceThreshold === 'number' &&
+        Number.isFinite(matchRules.confidenceThreshold)
+          ? matchRules.confidenceThreshold
+          : 0.7,
+    },
+  };
+
+  const hasContent =
+    normalized.role ||
+    normalized.domain ||
+    normalized.matchRules.keywords?.length ||
+    normalized.matchRules.excludeKeywords?.length ||
+    normalized.matchRules.systemTags?.length;
+
+  return hasContent ? normalized : null;
+}
+
 function nowISO(): string {
   return new Date().toISOString();
 }
@@ -490,6 +562,7 @@ export class ConfigStore {
     if (typeof profile?.maxTokens === 'number' && profile.maxTokens > 0) {
       result.maxTokens = profile.maxTokens;
     }
+    result.specialization = normalizeSpecialization(profile?.specialization);
     return result;
   }
 

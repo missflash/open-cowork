@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Key,
@@ -14,6 +15,7 @@ import { useApiConfigState } from '../../hooks/useApiConfigState';
 import { ApiConfigSetManager } from '../ApiConfigSetManager';
 import { CommonProviderSetupsCard, GuidanceInlineHint } from '../ProviderGuidance';
 import ApiDiagnosticsPanel from '../ApiDiagnosticsPanel';
+import { SpecializedProfileModal } from '../SpecializedProfileModal';
 
 interface ModelOptionItem {
   id: string;
@@ -24,6 +26,7 @@ interface ModelOptionItem {
 
 export function SettingsAPI() {
   const { t } = useTranslation();
+  const [isSpecializationModalOpen, setIsSpecializationModalOpen] = useState(false);
   const {
     provider,
     customProtocol,
@@ -34,6 +37,8 @@ export function SettingsAPI() {
     useCustomModel,
     contextWindow,
     maxTokens,
+    specialization,
+    isSpecializedModel,
     modelInputPlaceholder,
     modelInputHint,
     presets,
@@ -66,6 +71,8 @@ export function SettingsAPI() {
     setCustomModel,
     setContextWindow,
     setMaxTokens,
+    setSpecializationEnabled,
+    patchSpecialization,
     toggleCustomModel,
     setEnableThinking,
     applyCommonProviderSetup,
@@ -167,6 +174,52 @@ export function SettingsAPI() {
         />
         {currentPreset?.keyHint && (
           <p className="text-xs text-text-muted">{currentPreset.keyHint}</p>
+        )}
+      </div>
+
+      <div className="space-y-3 py-5 border-b border-border-muted">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-text-primary">
+              <Cpu className="w-4 h-4" />
+              Specialized Model Options
+            </label>
+            <p className="text-xs leading-5 text-text-muted">
+              Register the currently selected profile as an intent-based routing candidate.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-text-primary">
+              <input
+                type="checkbox"
+                checked={isSpecializedModel}
+                onChange={(e) => {
+                  setSpecializationEnabled(e.target.checked);
+                  if (e.target.checked) {
+                    setIsSpecializationModalOpen(true);
+                  }
+                }}
+                className="h-4 w-4 rounded border-border-muted"
+              />
+              Enable
+            </label>
+            <button
+              type="button"
+              disabled={!isSpecializedModel}
+              onClick={() => setIsSpecializationModalOpen(true)}
+              className="px-3 py-2 rounded-lg text-sm border border-border-muted text-text-secondary hover:border-border hover:text-text-primary disabled:opacity-40"
+            >
+              Advanced Settings
+            </button>
+          </div>
+        </div>
+        {isSpecializedModel && specialization && (
+          <div className="rounded-xl border border-border-muted bg-background-secondary/40 px-4 py-3 text-xs text-text-secondary space-y-1">
+            <div>role: {specialization.role || '(empty)'}</div>
+            <div>domain: {specialization.domain || '(empty)'}</div>
+            <div>priority: {specialization.priority}</div>
+            <div>enabled: {specialization.enabled ? 'true' : 'false'}</div>
+          </div>
         )}
       </div>
 
@@ -460,6 +513,13 @@ export function SettingsAPI() {
           </button>
         </div>
       </div>
+
+      <SpecializedProfileModal
+        isOpen={isSpecializationModalOpen}
+        onClose={() => setIsSpecializationModalOpen(false)}
+        specialization={specialization}
+        onChange={patchSpecialization}
+      />
     </div>
   );
 }

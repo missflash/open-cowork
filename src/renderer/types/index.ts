@@ -441,12 +441,29 @@ export type ProviderProfileKey =
   | 'custom:gemini';
 export type ConfigSetId = string;
 
+export interface SpecializedMatchRules {
+  keywords?: string[];
+  excludeKeywords?: string[];
+  systemTags?: string[];
+  confidenceThreshold?: number;
+}
+
+export interface SpecializedProfileConfig {
+  enabled: boolean;
+  role: string;
+  domain: string;
+  priority: number;
+  fallbackToDefault: boolean;
+  matchRules: SpecializedMatchRules;
+}
+
 export interface ProviderProfile {
   apiKey: string;
   baseUrl?: string;
   model: string;
   contextWindow?: number;
   maxTokens?: number;
+  specialization?: SpecializedProfileConfig | null;
 }
 
 export interface ApiConfigSet {

@@ -66,9 +66,20 @@ import {
   normalizeToolExecutionResultForUi,
 } from './tool-result-utils';
 import { fetchOllamaModelInfo } from '../config/ollama-api';
+import {
+  buildExecutionConfigForProfile,
+  decideSpecializedProfileRoute,
+} from '../config/specialized-profile-routing';
 
 // Virtual workspace path shown to the model (hides real sandbox path)
 const VIRTUAL_WORKSPACE_PATH = '/workspace';
+
+function extractTextFromMessage(message: Message): string {
+  return message.content
+    .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n');
+}
 
 /**
  * Estimate chars-per-token ratio based on content language.
@@ -1264,7 +1275,25 @@ ${hints.join('\n')}
       logTiming('before pi-ai model resolution', runStartTime);
 
       // Resolve model via pi-ai
-      const runtimeConfig = configStore.getAll();
+      const storedConfig = configStore.getAll();
+      const recentHistoryText = existingMessages
+        .slice(-6)
+        .map((message) => extractTextFromMessage(message))
+        .filter(Boolean)
+        .join('\n');
+      const routingDecision = decideSpecializedProfileRoute(storedConfig, prompt, recentHistoryText);
+      const runtimeConfig = buildExecutionConfigForProfile(storedConfig, routingDecision);
+      this.sendTraceStep(session.id, {
+        id: uuidv4(),
+        type: 'thinking',
+        status: 'completed',
+        title: `Model route: ${routingDecision.routeType} (${routingDecision.configSetId}:${routingDecision.profileKey})`,
+        content: `${routingDecision.reason} / confidence=${routingDecision.confidence.toFixed(2)}`,
+        timestamp: Date.now(),
+      });
+
+
+
       const modelString = this.getCurrentModelString(runtimeConfig.model);
       const configProtocol = resolvePiRouteProtocol(
         runtimeConfig.provider,

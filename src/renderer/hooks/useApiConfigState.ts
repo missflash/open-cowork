@@ -12,6 +12,7 @@ import type {
   ProviderProfileKey,
   ProviderPresets,
   ProviderType,
+  SpecializedProfileConfig,
 } from '../types';
 import { isLoopbackBaseUrl } from '../../shared/network/loopback';
 import {
@@ -44,6 +45,19 @@ interface UIProviderProfile {
   useCustomModel: boolean;
   contextWindow: string;
   maxTokens: string;
+  specialization: UISpecializedProfileConfig | null;
+}
+
+interface UISpecializedProfileConfig {
+  enabled: boolean;
+  role: string;
+  domain: string;
+  priority: string;
+  fallbackToDefault: boolean;
+  keywords: string;
+  excludeKeywords: string;
+  systemTags: string;
+  confidenceThreshold: string;
 }
 
 interface ConfigStateSnapshot {
@@ -151,6 +165,16 @@ export function isCustomOpenAiLoopbackGateway(baseUrl: string): boolean {
   return isLoopbackBaseUrl(baseUrl);
 }
 
+function resolveEffectiveBaseUrlForProvider(input: {
+  provider: ProviderType;
+  baseUrl: string;
+  currentPresetBaseUrl: string;
+}): string {
+  return input.provider === 'custom' || input.provider === 'ollama'
+    ? input.baseUrl.trim()
+    : (input.currentPresetBaseUrl || input.baseUrl).trim();
+}
+
 function isLegacyOllamaConfig(
   config: Pick<AppConfig, 'provider' | 'customProtocol' | 'baseUrl'> | null | undefined
 ): boolean {
@@ -201,6 +225,83 @@ function defaultProfileForKey(
     useCustomModel: prefersCustomInput,
     contextWindow: '',
     maxTokens: '',
+    specialization: null,
+  };
+}
+
+function parseDelimitedString(value: string): string[] {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function specializationToUi(
+  specialization: SpecializedProfileConfig | null | undefined
+): UISpecializedProfileConfig | null {
+  if (!specialization) {
+    return null;
+  }
+  return {
+    enabled: specialization.enabled,
+    role: specialization.role || '',
+    domain: specialization.domain || '',
+    priority: String(specialization.priority ?? 100),
+    fallbackToDefault: specialization.fallbackToDefault !== false,
+    keywords: (specialization.matchRules?.keywords || []).join(', '),
+    excludeKeywords: (specialization.matchRules?.excludeKeywords || []).join(', '),
+    systemTags: (specialization.matchRules?.systemTags || []).join(', '),
+    confidenceThreshold: String(specialization.matchRules?.confidenceThreshold ?? 0.7),
+  };
+}
+
+function specializationFromUi(
+  specialization: UISpecializedProfileConfig | null | undefined
+): SpecializedProfileConfig | null {
+  if (!specialization) {
+    return null;
+  }
+  const role = specialization.role.trim();
+  const domain = specialization.domain.trim();
+  const keywords = parseDelimitedString(specialization.keywords);
+  const excludeKeywords = parseDelimitedString(specialization.excludeKeywords);
+  const systemTags = parseDelimitedString(specialization.systemTags);
+  const confidenceThreshold = Number(specialization.confidenceThreshold);
+  const priority = Number(specialization.priority);
+  const hasContent =
+    role || domain || keywords.length || excludeKeywords.length || systemTags.length;
+  if (!hasContent) {
+    return null;
+  }
+  return {
+    enabled: specialization.enabled,
+    role,
+    domain,
+    priority: Number.isFinite(priority) ? priority : 100,
+    fallbackToDefault: specialization.fallbackToDefault,
+    matchRules: {
+      keywords,
+      excludeKeywords,
+      systemTags,
+      confidenceThreshold: Number.isFinite(confidenceThreshold) ? confidenceThreshold : 0.7,
+    },
+  };
+}
+
+function defaultSpecializationForProfile(profileKey: ProviderProfileKey): UISpecializedProfileConfig {
+  const isSemiconductorDefault = profileKey === 'custom:openai';
+  return {
+    enabled: true,
+    role: isSemiconductorDefault ? 'expert_semiconductor_rnd' : '',
+    domain: isSemiconductorDefault ? 'semiconductor_rnd' : '',
+    priority: '100',
+    fallbackToDefault: true,
+    keywords: isSemiconductorDefault
+      ? 'wafer, yield, pdk, spice, tcad, etch, deposition, lithography'
+      : '',
+    excludeKeywords: '',
+    systemTags: '',
+    confidenceThreshold: '0.7',
   };
 }
 
@@ -273,6 +374,7 @@ function normalizeProfile(
     useCustomModel: !hasPresetModel,
     contextWindow: profile?.contextWindow ? String(profile.contextWindow) : '',
     maxTokens: profile?.maxTokens ? String(profile.maxTokens) : '',
+    specialization: specializationToUi(profile?.specialization),
   };
 }
 
@@ -351,6 +453,7 @@ function toPersistedProfiles(
       model: finalModel,
       contextWindow: profile.contextWindow ? Number(profile.contextWindow) : undefined,
       maxTokens: profile.maxTokens ? Number(profile.maxTokens) : undefined,
+      specialization: specializationFromUi(profile.specialization),
     };
   }
   return persisted;
@@ -370,6 +473,7 @@ export function buildApiConfigDraftSignature(
       apiKey: persisted[key]?.apiKey || '',
       baseUrl: persisted[key]?.baseUrl || '',
       model: persisted[key]?.model || '',
+      specialization: persisted[key]?.specialization || null,
     })),
   });
 }
@@ -962,6 +1066,8 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
       || modelOptions.length === 0;
   const contextWindow = currentProfile.contextWindow;
   const maxTokens = currentProfile.maxTokens;
+  const specialization = currentProfile.specialization;
+  const isSpecializedModel = Boolean(specialization);
   const detectedProviderSetup = useMemo(
     () => (provider === 'custom' ? detectCommonProviderSetup(baseUrl) : null),
     [baseUrl, provider]
@@ -1166,6 +1272,31 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
       dispatch({ type: 'UPDATE_PROFILE_FN', profileKey: activeProfileKey, updater });
     },
     [activeProfileKey]
+  );
+
+  const setSpecializationEnabled = useCallback(
+    (enabled: boolean) => {
+      updateActiveProfile((prev) => ({
+        ...prev,
+        specialization: enabled
+          ? (prev.specialization || defaultSpecializationForProfile(activeProfileKey))
+          : null,
+      }));
+    },
+    [activeProfileKey, updateActiveProfile]
+  );
+
+  const patchSpecialization = useCallback(
+    (patch: Partial<UISpecializedProfileConfig>) => {
+      updateActiveProfile((prev) => ({
+        ...prev,
+        specialization: {
+          ...(prev.specialization || defaultSpecializationForProfile(activeProfileKey)),
+          ...patch,
+        },
+      }));
+    },
+    [activeProfileKey, updateActiveProfile]
   );
 
   const changeProvider = useCallback(
@@ -1384,10 +1515,11 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
     dispatch({ type: 'SET_IS_TESTING', payload: true });
     dispatch({ type: 'SET_TEST_RESULT', payload: null });
     try {
-      const resolvedBaseUrl =
-        provider === 'custom' || provider === 'ollama'
-          ? baseUrl.trim()
-          : (baseUrl.trim() || currentPreset.baseUrl || '').trim();
+      const resolvedBaseUrl = resolveEffectiveBaseUrlForProvider({
+        provider,
+        baseUrl,
+        currentPresetBaseUrl: baseUrl.trim() || currentPreset.baseUrl || '',
+      });
 
       const result = await window.electronAPI.config.test({
         provider,
@@ -1441,10 +1573,11 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
     dispatch({ type: 'SET_DIAGNOSTIC_RESULT', payload: null });
     dispatch({ type: 'SET_TEST_RESULT', payload: null });
     try {
-      const resolvedBaseUrl =
-        provider === 'custom' || provider === 'ollama'
-          ? baseUrl.trim()
-          : (baseUrl.trim() || currentPreset.baseUrl || '').trim();
+      const resolvedBaseUrl = resolveEffectiveBaseUrlForProvider({
+        provider,
+        baseUrl,
+        currentPresetBaseUrl: baseUrl.trim() || currentPreset.baseUrl || '',
+      });
 
       const finalModel = useCustomModel ? customModel.trim() : model;
 
@@ -1557,7 +1690,6 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
     activeProfileKey,
     apiKey,
     baseUrl,
-    presets,
     provider,
     clearError,
     showErrorKey,
@@ -1726,10 +1858,11 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
       clearError();
       dispatch({ type: 'SET_IS_SAVING', payload: true });
       try {
-        const resolvedBaseUrl =
-          provider === 'custom' || provider === 'ollama'
-            ? baseUrl.trim()
-            : (currentPreset.baseUrl || baseUrl).trim();
+        const resolvedBaseUrl = resolveEffectiveBaseUrlForProvider({
+          provider,
+          baseUrl,
+          currentPresetBaseUrl: currentPreset.baseUrl || baseUrl,
+        });
 
         const persistedProfiles = toPersistedProfiles(profiles);
 
@@ -2055,6 +2188,8 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
     useCustomModel,
     contextWindow,
     maxTokens,
+    specialization,
+    isSpecializedModel,
     modelInputPlaceholder: modelInputGuidance.placeholder,
     modelInputHint: modelInputGuidance.hint,
     enableThinking,
@@ -2094,6 +2229,8 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
     setCustomModel,
     setContextWindow,
     setMaxTokens,
+    setSpecializationEnabled,
+    patchSpecialization,
     toggleCustomModel,
     setEnableThinking,
     applyCommonProviderSetup,

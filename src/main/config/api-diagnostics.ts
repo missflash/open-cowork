@@ -34,6 +34,7 @@ import { log, logWarn } from '../utils/logger';
 import { probeWithClaudeSdk } from '../claude/claude-sdk-one-shot';
 import { fetchOllamaModelIndex } from './ollama-api';
 
+
 const STEP_NAMES: DiagnosticStepName[] = ['dns', 'tcp', 'tls', 'auth', 'model'];
 const TCP_TIMEOUT_MS = 5000;
 const TLS_TIMEOUT_MS = 5000;
@@ -552,6 +553,7 @@ export async function runDiagnostics(input: DiagnosticInput): Promise<Diagnostic
 
 async function runDiagnosticsImpl(input: DiagnosticInput): Promise<DiagnosticResult> {
   const verificationLevel: DiagnosticVerificationLevel = input.verificationLevel ?? 'deep';
+
   log('[Diagnostics] Starting', {
     provider: input.provider,
     customProtocol: input.customProtocol,

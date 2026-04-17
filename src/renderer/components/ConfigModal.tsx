@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   X,
   Key,
@@ -16,6 +16,7 @@ import type { AppConfig, ApiTestResult } from '../types';
 import { useApiConfigState } from '../hooks/useApiConfigState';
 import { ApiConfigSetManager } from './ApiConfigSetManager';
 import { CommonProviderSetupsCard, GuidanceInlineHint } from './ProviderGuidance';
+import { SpecializedProfileModal } from './SpecializedProfileModal';
 
 interface ConfigModalProps {
   isOpen: boolean;
@@ -45,6 +46,7 @@ export function ConfigModal({
   isFirstRun,
 }: ConfigModalProps) {
   const { t } = useTranslation();
+  const [isSpecializationModalOpen, setIsSpecializationModalOpen] = useState(false);
   const {
     provider,
     customProtocol,
@@ -53,6 +55,8 @@ export function ConfigModal({
     model,
     customModel,
     useCustomModel,
+    specialization,
+    isSpecializedModel,
     modelInputPlaceholder,
     modelInputHint,
     presets,
@@ -85,6 +89,8 @@ export function ConfigModal({
     setBaseUrl,
     setModel,
     setCustomModel,
+    setSpecializationEnabled,
+    patchSpecialization,
     toggleCustomModel,
     applyCommonProviderSetup,
     changeProvider,
@@ -237,6 +243,44 @@ export function ConfigModal({
             {currentPreset?.keyHint && (
               <p className="text-xs text-text-muted">{currentPreset.keyHint}</p>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                  <Cpu className="w-4 h-4" />
+                  Specialized Model Options
+                </label>
+                <p className="text-xs text-text-muted">
+                  Register the current profile as an automatic routing candidate.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm text-text-primary">
+                  <input
+                    type="checkbox"
+                    checked={isSpecializedModel}
+                    onChange={(e) => {
+                      setSpecializationEnabled(e.target.checked);
+                      if (e.target.checked) {
+                        setIsSpecializationModalOpen(true);
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-border-muted"
+                  />
+                  Enable
+                </label>
+                <button
+                  type="button"
+                  disabled={!isSpecializedModel}
+                  onClick={() => setIsSpecializationModalOpen(true)}
+                  className="px-3 py-2 rounded-lg text-sm border border-border-muted text-text-secondary hover:text-text-primary disabled:opacity-40"
+                >
+                  Advanced Settings
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Custom Protocol */}
@@ -488,6 +532,13 @@ export function ConfigModal({
             </button>
           </div>
         </div>
+
+        <SpecializedProfileModal
+          isOpen={isSpecializationModalOpen}
+          onClose={() => setIsSpecializationModalOpen(false)}
+          specialization={specialization}
+          onChange={patchSpecialization}
+        />
       </div>
     </div>
   );

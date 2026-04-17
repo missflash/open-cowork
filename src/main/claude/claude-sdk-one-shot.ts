@@ -13,6 +13,7 @@ import {
 import { log, logWarn } from '../utils/logger';
 import { normalizeGeneratedTitle } from '../session/session-title-utils';
 import { getSharedAuthStorage } from './shared-auth';
+
 import {
   applyPiModelRuntimeOverrides,
   buildSyntheticPiModel,
@@ -166,6 +167,8 @@ async function runPiAiOneShot(
   systemPrompt: string,
   config: AppConfig
 ): Promise<{ text: string; hasThinking: boolean; durationMs: number }> {
+
+
   const modelString = resolvePiModelString(config);
   const keyProvider = config.customProtocol || config.provider || 'anthropic';
   const parts = modelString.split('/');
@@ -308,6 +311,8 @@ export async function probeWithClaudeSdk(
   if (!probeConfig.model?.trim()) {
     return { ok: false, errorType: 'unknown', details: 'missing_model' };
   }
+
+
 
   if (!probeConfig.apiKey?.trim()) {
     return { ok: false, errorType: 'missing_key', details: 'API key is required.' };
