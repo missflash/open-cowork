@@ -79,7 +79,11 @@ async def chat_completions(req: Request):
         logger.error(f"Failed to process chat completions: {e}")
         return JSONResponse(status_code=400, content={"error": f"Bad Request: {str(e)}"})
 
+class Config:
+    HOST = "127.0.0.1"
+    PORT = 8080
+
 if __name__ == "__main__":
-    logger.info("Starting Open-Cowork Mock Proxy Server on port 8080...")
-    # uvicorn 환경에서 실행 (포트 8080)
-    uvicorn.run(app, host="127.0.0.1", port=8080)
+    logger.info(f"Starting Open-Cowork Mock Proxy Server on {Config.HOST}:{Config.PORT}...")
+    # uvicorn 환경에서 실행
+    uvicorn.run(app, host=Config.HOST, port=Config.PORT)

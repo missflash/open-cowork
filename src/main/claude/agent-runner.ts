@@ -73,6 +73,7 @@ import {
 
 // Virtual workspace path shown to the model (hides real sandbox path)
 const VIRTUAL_WORKSPACE_PATH = '/workspace';
+const SPECIALIZED_ROUTING_HISTORY_WINDOW = 6;
 
 function extractTextFromMessage(message: Message): string {
   return message.content
@@ -1277,11 +1278,15 @@ ${hints.join('\n')}
       // Resolve model via pi-ai
       const storedConfig = configStore.getAll();
       const recentHistoryText = existingMessages
-        .slice(-6)
+        .slice(-SPECIALIZED_ROUTING_HISTORY_WINDOW)
         .map((message) => extractTextFromMessage(message))
         .filter(Boolean)
         .join('\n');
-      const routingDecision = decideSpecializedProfileRoute(storedConfig, prompt, recentHistoryText);
+      const routingDecision = decideSpecializedProfileRoute(
+        storedConfig,
+        prompt,
+        recentHistoryText
+      );
       const runtimeConfig = buildExecutionConfigForProfile(storedConfig, routingDecision);
       this.sendTraceStep(session.id, {
         id: uuidv4(),
@@ -1291,8 +1296,6 @@ ${hints.join('\n')}
         content: `${routingDecision.reason} / confidence=${routingDecision.confidence.toFixed(2)}`,
         timestamp: Date.now(),
       });
-
-
 
       const modelString = this.getCurrentModelString(runtimeConfig.model);
       const configProtocol = resolvePiRouteProtocol(

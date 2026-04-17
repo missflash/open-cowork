@@ -137,6 +137,10 @@ export interface AppConfig {
 
   // First run flag
   isConfigured: boolean;
+
+  // Track last used general profile (for routing fallback)
+  lastGeneralConfigSetId?: ConfigSetId | null;
+  lastGeneralProfileKey?: ProviderProfileKey | null;
 }
 
 const DEFAULT_CONFIG_SET_ID = 'default';
@@ -378,9 +382,7 @@ function sanitizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean);
+  return value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean);
 }
 
 function normalizeSpecialization(
@@ -397,9 +399,7 @@ function normalizeSpecialization(
       ? specialization.priority
       : 100;
   const fallbackToDefault =
-    typeof specialization.fallbackToDefault === 'boolean'
-      ? specialization.fallbackToDefault
-      : true;
+    typeof specialization.fallbackToDefault === 'boolean' ? specialization.fallbackToDefault : true;
   const matchRules = specialization.matchRules || {};
   const normalized: SpecializedProfileConfig = {
     enabled: typeof specialization.enabled === 'boolean' ? specialization.enabled : true,
@@ -922,6 +922,9 @@ export class ConfigStore {
       sandboxEnabled: toBoolean(raw.sandboxEnabled, defaultConfig.sandboxEnabled),
       enableThinking: projected.enableThinking,
       isConfigured: toBoolean(raw.isConfigured, defaultConfig.isConfigured),
+      lastGeneralConfigSetId: toNonEmptyString(raw.lastGeneralConfigSetId) || null,
+      lastGeneralProfileKey:
+        (toNonEmptyString(raw.lastGeneralProfileKey) as ProviderProfileKey) || null,
     };
     this.normalizeModelIds(result);
     return result;
@@ -948,7 +951,7 @@ export class ConfigStore {
     const activeConfigSet =
       nextConfigSets.find((set) => set.id === requestedActiveConfigSetId) || nextConfigSets[0];
     const projected = this.projectFromConfigSet(activeConfigSet);
-    return {
+    const result: AppConfig = {
       ...base,
       provider: projected.provider,
       customProtocol: projected.customProtocol,
@@ -961,6 +964,17 @@ export class ConfigStore {
       activeConfigSetId: activeConfigSet.id,
       configSets: nextConfigSets,
     };
+
+    // Update lastGeneral pointers if the newly active profile is general
+    const profile = activeConfigSet.profiles[activeConfigSet.activeProfileKey];
+    const isSpecialized = profile?.specialization?.enabled === true;
+
+    if (!isSpecialized) {
+      result.lastGeneralConfigSetId = activeConfigSet.id;
+      result.lastGeneralProfileKey = activeConfigSet.activeProfileKey;
+    }
+
+    return result;
   }
 
   private buildUniqueConfigSetName(

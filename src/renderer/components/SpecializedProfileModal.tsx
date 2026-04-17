@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { BUILTIN_SPECIALIZATIONS } from '../../shared/constants/specialized-domains';
 
 interface SpecializedProfileModalState {
   enabled: boolean;
@@ -50,9 +51,9 @@ export function SpecializedProfileModal({
 
         <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
           <label className="flex items-center gap-3 text-sm text-text-primary">
-              <input
-                type="checkbox"
-                checked={specialization.enabled}
+            <input
+              type="checkbox"
+              checked={specialization.enabled}
               onChange={(e) => onChange({ enabled: e.target.checked })}
               className="h-4 w-4 rounded border-border-muted"
             />
@@ -109,7 +110,12 @@ export function SpecializedProfileModal({
               value={specialization.keywords}
               onChange={(e) => onChange({ keywords: e.target.value })}
               rows={3}
-              placeholder="wafer, yield, pdk, spice, tcad"
+              placeholder={
+                specialization.domain && BUILTIN_SPECIALIZATIONS[specialization.domain]
+                  ? BUILTIN_SPECIALIZATIONS[specialization.domain].keywords.slice(0, 5).join(', ') +
+                    '...'
+                  : 'wafer, yield, pdk, semiconductor, ...'
+              }
               className="w-full px-4 py-3 rounded-xl bg-background border border-border text-text-primary placeholder-text-muted"
             />
           </div>

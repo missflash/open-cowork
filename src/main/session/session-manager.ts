@@ -55,6 +55,10 @@ import {
 } from './session-title-utils';
 import { generateTitleWithClaudeSdk } from '../claude/claude-sdk-one-shot';
 import { buildScheduledTaskTitle } from '../../shared/schedule/task-title';
+import {
+  decideSpecializedProfileRoute,
+  buildExecutionConfigForProfile,
+} from '../config/specialized-profile-routing';
 
 interface AgentRunner {
   run(session: Session, prompt: string, existingMessages: Message[]): Promise<void>;
@@ -794,10 +798,12 @@ export class SessionManager {
   }
 
   private async generateTitleWithConfig(titlePrompt: string): Promise<string | null> {
+    const config = configStore.getAll();
+    const routingDecision = decideSpecializedProfileRoute(config, titlePrompt, '');
+    const runtimeConfig = buildExecutionConfigForProfile(config, routingDecision);
+
     // Always use pi-ai SDK for title generation
-    return normalizeGeneratedTitle(
-      await generateTitleWithClaudeSdk(titlePrompt, configStore.getAll())
-    );
+    return normalizeGeneratedTitle(await generateTitleWithClaudeSdk(titlePrompt, runtimeConfig));
   }
 
   private enqueuePrompt(session: Session, prompt: string, content?: ContentBlock[]): void {
